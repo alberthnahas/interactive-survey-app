@@ -14,24 +14,19 @@ import {
     limit,
     getDocs
 } from 'firebase/firestore';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 // --- Helper Functions & Configuration ---
 
-// Use environment-provided config if available, otherwise use user's provided config
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-    ? JSON.parse(__firebase_config)
-    : {
-        apiKey: "AIzaSyB7REh2ZdA3_tA0HuR-GPTG4CCG9-qp4ao",
-        authDomain: "interactive-survey-app.firebaseapp.com",
-        projectId: "interactive-survey-app",
-        storageBucket: "interactive-survey-app.appspot.com",
-        messagingSenderId: "862127120915",
-        appId: "1:862127120915:web:9f673dd1df9f19ab8695e6"
-      };
-
-// Get a unique App ID for this instance to namespace the database
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-survey-app';
+// Your Firebase configuration is now directly used.
+const firebaseConfig = {
+    apiKey: "AIzaSyB7REh2ZdA3_tA0HuR-GPTG4CCG9-qp4ao",
+    authDomain: "interactive-survey-app.firebaseapp.com",
+    projectId: "interactive-survey-app",
+    storageBucket: "interactive-survey-app.appspot.com",
+    messagingSenderId: "862127120915",
+    appId: "1:862127120915:web:9f673dd1df9f19ab8695e6"
+};
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -93,7 +88,6 @@ const WordCloudChart = ({ words }) => {
             .sort((a, b) => b.votes - a.votes)
             .map(word => ({
                 ...word,
-                // Scale font size: min 1rem, max 4rem
                 size: 1 + (word.votes / maxVotes) * 3,
             }));
     }, [words]);
@@ -131,11 +125,10 @@ const OpenEndedResults = ({ responses }) => {
     );
 };
 
-
 const CreateSurvey = ({ setView, setSurveyId }) => {
     const [title, setTitle] = useState('');
     const [options, setOptions] = useState(['', '']);
-    const [surveyType, setSurveyType] = useState('multiple-choice'); // 'multiple-choice', 'word-cloud', 'open-ended'
+    const [surveyType, setSurveyType] = useState('multiple-choice');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -152,8 +145,7 @@ const CreateSurvey = ({ setView, setSurveyId }) => {
         const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789';
         let id = '';
         for (let i = 0; i < 6; i++) id += chars.charAt(Math.floor(Math.random() * chars.length));
-        // Check for existence within the app's public data namespace
-        const docSnap = await getDoc(doc(db, "artifacts", appId, "public", "data", "surveys", id));
+        const docSnap = await getDoc(doc(db, "surveys", id));
         return docSnap.exists() ? generateSurveyId() : id;
     };
 
@@ -178,13 +170,12 @@ const CreateSurvey = ({ setView, setSurveyId }) => {
             if (surveyType === 'multiple-choice') {
                 surveyData.options = options.map(opt => ({ text: opt, votes: 0 }));
             } else if (surveyType === 'word-cloud') {
-                surveyData.words = []; // {text: string, votes: number}
+                surveyData.words = [];
             } else if (surveyType === 'open-ended') {
-                surveyData.responses = []; // string[]
+                surveyData.responses = [];
             }
             
-            // Store the document within the app's public data namespace
-            await setDoc(doc(db, "artifacts", appId, "public", "data", "surveys", newSurveyId), surveyData);
+            await setDoc(doc(db, "surveys", newSurveyId), surveyData);
             setSurveyId(newSurveyId);
             setView('presenter');
         } catch (err) {
@@ -215,12 +206,10 @@ const CreateSurvey = ({ setView, setSurveyId }) => {
                             <QuestionTypeButton type="open-ended" label="Open-Ended" icon={<MessageSquareIcon />} />
                         </div>
                     </div>
-
                     <div>
                         <label htmlFor="title" className="block text-sm font-medium text-slate-300 mb-2">Your Question</label>
                         <input id="title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., What's our top priority for Q3?" className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-md text-white focus:ring-2 focus:ring-indigo-500 outline-none" required />
                     </div>
-
                     {surveyType === 'multiple-choice' && (
                         <div>
                             <label className="block text-sm font-medium text-slate-300 mb-2">Options</label>
@@ -235,7 +224,6 @@ const CreateSurvey = ({ setView, setSurveyId }) => {
                             <button type="button" onClick={addOption} disabled={options.length >= 8} className="text-sm text-indigo-400 hover:text-indigo-300 mt-3 disabled:opacity-50">+ Add Option</button>
                         </div>
                     )}
-                    
                     <div className="pt-2">
                         <button type="submit" disabled={isLoading} className="w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 disabled:bg-indigo-400">
                             {isLoading ? 'Creating...' : 'Create Survey'}
@@ -254,8 +242,7 @@ const SurveyPresenter = ({ surveyId, setView }) => {
 
     useEffect(() => {
         if (!surveyId) return;
-        // Listen to the document within the app's public data namespace
-        const unsub = onSnapshot(doc(db, "artifacts", appId, "public", "data", "surveys", surveyId), (doc) => {
+        const unsub = onSnapshot(doc(db, "surveys", surveyId), (doc) => {
             if (doc.exists()) setSurvey({ id: doc.id, ...doc.data() });
             else setError("Survey not found.");
         }, (err) => {
@@ -310,8 +297,7 @@ const SurveyParticipant = ({ surveyId, userId, setView }) => {
     const [textInput, setTextInput] = useState('');
 
     useEffect(() => {
-        // Listen to the document within the app's public data namespace
-        const unsub = onSnapshot(doc(db, "artifacts", appId, "public", "data", "surveys", surveyId), (docSnap) => {
+        const unsub = onSnapshot(doc(db, "surveys", surveyId), (docSnap) => {
             if (docSnap.exists()) {
                 const surveyData = docSnap.data();
                 setSurvey({ id: docSnap.id, ...surveyData });
@@ -325,7 +311,7 @@ const SurveyParticipant = ({ surveyId, userId, setView }) => {
         if (hasVoted || isVoting) return;
         setIsVoting(true);
         try {
-            const surveyRef = doc(db, "artifacts", appId, "public", "data", "surveys", surveyId);
+            const surveyRef = doc(db, "surveys", surveyId);
             const surveyDoc = await getDoc(surveyRef);
             if (!surveyDoc.exists() || surveyDoc.data().participants?.includes(userId)) {
                 setIsVoting(false);
@@ -346,7 +332,7 @@ const SurveyParticipant = ({ surveyId, userId, setView }) => {
         const submission = textInput.trim();
 
         try {
-            const surveyRef = doc(db, "artifacts", appId, "public", "data", "surveys", surveyId);
+            const surveyRef = doc(db, "surveys", surveyId);
             if (survey.type === 'open-ended') {
                 await updateDoc(surveyRef, { responses: arrayUnion(submission), participants: arrayUnion(userId) });
             } else if (survey.type === 'word-cloud') {
@@ -429,8 +415,7 @@ const HomePage = ({ setView, setSurveyId }) => {
         if (!joinCode.trim()) { setError('Please enter a survey code.'); return; }
         setIsLoading(true);
         try {
-            // Check for the document within the app's public data namespace
-            const surveyRef = doc(db, "artifacts", appId, "public", "data", "surveys", joinCode.toUpperCase().trim());
+            const surveyRef = doc(db, "surveys", joinCode.toUpperCase().trim());
             const surveyDoc = await getDoc(surveyRef);
             if (surveyDoc.exists()) {
                 setSurveyId(joinCode.toUpperCase().trim());
@@ -482,27 +467,14 @@ export default function App() {
     const [isAuthReady, setIsAuthReady] = useState(false);
 
     useEffect(() => {
-        const authenticateUser = async () => {
-            try {
-                // Use the custom token provided by the environment if available
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    // Fallback to anonymous sign-in if no token is provided
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Authentication failed:", error);
-            }
-        };
-
-        authenticateUser();
-
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (user) {
                 setUserId(user.uid);
             } else {
-                setUserId(null);
+                // If no user, sign in anonymously.
+                signInAnonymously(auth).catch(error => {
+                    console.error("Anonymous sign-in failed:", error);
+                });
             }
             setIsAuthReady(true);
         });
